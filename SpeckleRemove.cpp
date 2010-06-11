@@ -455,7 +455,7 @@ namespace
           double  deltax = (L*localVar-meanVal*meanVal)/(L+1);
           if (deltax >= 0)
 	      {
-              pixelVal = deltax*(pixelVal - meanVal)/(deltax + (meanVal*meanVal + deltax)/L);
+              pixelVal = meanVal + deltax*(pixelVal - meanVal)/(deltax + (meanVal*meanVal + deltax)/L);
 	      }
 	      else
 	      {
