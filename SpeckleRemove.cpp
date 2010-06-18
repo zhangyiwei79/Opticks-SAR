@@ -7,10 +7,6 @@
  * http://www.gnu.org/licenses/lgpl.html
  */
 
-/*
-The following is aid to remove the speckle noise using refined Lee filter
-based on local statistcs
-*/
 #include "DataAccessor.h"
 #include "DataAccessorImpl.h"
 #include "DataRequest.h"
@@ -35,11 +31,11 @@ REGISTER_PLUGIN_BASIC(OpticksTutorial, SpeckleRemove);
 namespace
 {
 
-   #define OVERLAP_WINDOW_SIZE 3        //Window length
-   #define GRADIENT_DIFF_THRESHOLD 100  //threshold for edge detection
-   #define NUM_OF_VAR 5                 
+   #define OVERLAP_WINDOW_SIZE 3
+   #define GRADIENT_DIFF_THRESHOLD 100
+   #define NUM_OF_VAR 5 
 
-	//Calculate the local mean and variance when horizantal/vertical edge is present
+	//Calculate the paritial mean for horizantal/vertical edge case
    double CaculatePartialMeanHV(int nrowStart, int rowEnd, int colStart, int colEnd, double pMatrix[][OVERLAP_WINDOW_SIZE*2+1], double *var)
    {
 	   int i,j, nCount = 0;;
@@ -71,7 +67,7 @@ namespace
 	   return meanVal;
    }
 
-   //Calculate the local mean for diagonal edge is present
+   //Calculate the paritial mean for diagonal edge case
    double CaculatePartialMeanDiag(int colStart, int colEnd, int nIndex, double pMatrix[][OVERLAP_WINDOW_SIZE*2+1], double *var)
    {
 	   int i,j, col1, col2, nCount = 0;;
@@ -143,7 +139,7 @@ namespace
 	   return meanVal;
    }
 
-   //Calculate the local mean within the sliding window (the neighborhood of current pixel)
+   //Calculate the paritial mean for the sub-window
    double CaculatePartialMean(int nIndex, double pMatrix[][OVERLAP_WINDOW_SIZE*2+1], double *var)
    {
 	   int i,j, m, n;
@@ -296,7 +292,7 @@ namespace
 
 
    template<typename T>
-   void speckleNoiseRemove(T* pData, DataAccessor pSrcAcc, int row, int col, int rowSize, int colSize)
+   void speckleNoiseRemove(T* pData, DataAccessor pSrcAcc, int row, int col, int rowSize, int colSize, EncodingType type)
    {
 	  int i, j, m, n;
 	  int distX, distY;
@@ -307,27 +303,28 @@ namespace
 	  double noiseVar = 64;
 	  double localVar = 0.0;
 
-	  T tempVal;
 	  double windowVal[OVERLAP_WINDOW_SIZE*2+1][OVERLAP_WINDOW_SIZE*2+1];
 	  double meanWindow[OVERLAP_WINDOW_SIZE][OVERLAP_WINDOW_SIZE];
 
 	  if ((col-OVERLAP_WINDOW_SIZE < 0) || (col+OVERLAP_WINDOW_SIZE > colSize - 1))
 	  {
-		  pSrcAcc->toPixel(i, j);
+		  pSrcAcc->toPixel(row, col);
           VERIFYNRV(pSrcAcc.isValid());
-          *pData = *reinterpret_cast<T*>(pSrcAcc->getColumn()); 
+		  pixelVal = Service<ModelServices>()->getDataValue(type, pSrcAcc->getColumn(), COMPLEX_MAGNITUDE, 0);
+          *pData = static_cast<T>(pixelVal);
 		  return;
 	  }
 
 	  if ((row-OVERLAP_WINDOW_SIZE < 0) || (row+OVERLAP_WINDOW_SIZE > rowSize - 1))
 	  {
-		  pSrcAcc->toPixel(i, j);
+		  pSrcAcc->toPixel(row, col);
           VERIFYNRV(pSrcAcc.isValid());
-          *pData = *reinterpret_cast<T*>(pSrcAcc->getColumn()); 
+		  pixelVal = Service<ModelServices>()->getDataValue(type, pSrcAcc->getColumn(), COMPLEX_MAGNITUDE, 0);
+          *pData = static_cast<T>(pixelVal);
 		  return;
 	  }
 
-	  //Get the pixels in the sliding window
+	  //Get the pixels in the window
 	  m = 0;
 	  for (i=row - OVERLAP_WINDOW_SIZE; i<= row + OVERLAP_WINDOW_SIZE; i++)
 	  {
@@ -336,15 +333,14 @@ namespace
 		  {
 			 pSrcAcc->toPixel(i, j);
              VERIFYNRV(pSrcAcc.isValid());
-             tempVal = *reinterpret_cast<T*>(pSrcAcc->getColumn()); 
-			 windowVal[m][n] = tempVal;
+			 windowVal[m][n] = Service<ModelServices>()->getDataValue(type, pSrcAcc->getColumn(), COMPLEX_MAGNITUDE, 0);
 			 n++;
 		  }
 		  m++;
 	  }
 	  pixelVal = windowVal[OVERLAP_WINDOW_SIZE][OVERLAP_WINDOW_SIZE];
 
-	  //Calculate the mean in each 3 by 3 window
+	  //Calculate the mean for each window
 	  distX = 0;
 	  for (i = 0; i< OVERLAP_WINDOW_SIZE; i++)
 	  {
@@ -368,7 +364,7 @@ namespace
 		  distX += 2;
 	  }
 
-	  //Calculate the gradient at 4 directions
+	  //Calculate gradient
 	  gradientVector[0] = abs((meanWindow[0][0] - meanWindow[2][0]) + 2*(meanWindow[0][1] - meanWindow[2][1]) + (meanWindow[0][2] - meanWindow[2][2])); // horizantal
 	  gradientVector[1] = abs((meanWindow[0][0] - meanWindow[0][2]) + 2*(meanWindow[1][0] - meanWindow[1][2]) + (meanWindow[2][0] - meanWindow[2][2])); // vertical
 	  gradientVector[2] = abs((meanWindow[0][1] - meanWindow[1][2]) + 2*(meanWindow[0][0] - meanWindow[2][2]) + (meanWindow[1][0] - meanWindow[2][1])); // digonal 45
@@ -376,7 +372,7 @@ namespace
 
 	  //Get the maxium and minimum gradient
 	  double maxGradient = -1;
-	  double minGradient = 65535;
+	  double minGradient = std::numeric_limits<double>::max();
 	  int    nIndex = 0;
 	  for (i=0; i<4; i++)
 	  {
@@ -392,8 +388,6 @@ namespace
 		  }
 	  }
 
-   //If there is an edge, we need to determine to which sub-area the pixel belongs
-   // and caluclate the local mean and variance of the sub-area
 	  if (abs(maxGradient) > GRADIENT_DIFF_THRESHOLD)
 	  {
 		  if (0 == nIndex)
@@ -448,10 +442,10 @@ namespace
 
 	  }
 
-	  //Use MMSEE filter to denoise
+	  //Use filter to denoise
 	  if (localVar > 0)
 	  {
-	      double L = 1/EstimateNoise(windowVal); //Estimate noise
+	      double L = 1/EstimateNoise(windowVal);
           double  deltax = (L*localVar-meanVal*meanVal)/(L+1);
           if (deltax >= 0)
 	      {
@@ -482,7 +476,7 @@ SpeckleRemove::SpeckleRemove()
    setProductionStatus(false);
    setType("Sample");
    setSubtype("Denoise");
-   setMenuLocation("[Tutorial]/Speckle Remove");
+   setMenuLocation("[SAR]/Speckle Remove");
    setAbortSupported(true);
 }
 
@@ -526,15 +520,14 @@ bool SpeckleRemove::execute(PlugInArgList* pInArgList, PlugInArgList* pOutArgLis
    }
    RasterDataDescriptor* pDesc = static_cast<RasterDataDescriptor*>(pCube->getDataDescriptor());
    VERIFY(pDesc != NULL);
-   if (pDesc->getDataType() == INT4SCOMPLEX || pDesc->getDataType() == FLT8COMPLEX)
+   EncodingType ResultType = pDesc->getDataType();
+   if (pDesc->getDataType() == INT4SCOMPLEX)
    {
-      std::string msg = "Speckle remove cannot be performed on complex types.";
-      pStep->finalize(Message::Failure, msg);
-      if (pProgress != NULL) 
-      {
-         pProgress->updateProgress(msg, 0, ERRORS);
-      }
-      return false;
+      ResultType = INT4SBYTES;
+   }
+   else if (pDesc->getDataType() == FLT8COMPLEX)
+   {
+      ResultType = FLT8BYTES;
    }
 
    FactoryResource<DataRequest> pRequest;
@@ -542,7 +535,7 @@ bool SpeckleRemove::execute(PlugInArgList* pInArgList, PlugInArgList* pOutArgLis
    DataAccessor pSrcAcc = pCube->getDataAccessor(pRequest.release());
 
    ModelResource<RasterElement> pResultCube(RasterUtilities::createRasterElement(pCube->getName() +
-      "_Speckle_Remove_Result", pDesc->getRowCount(), pDesc->getColumnCount(), pDesc->getDataType()));
+      "_Speckle_Remove_Result", pDesc->getRowCount(), pDesc->getColumnCount(), ResultType));
    if (pResultCube.get() == NULL)
    {
       std::string msg = "A raster cube could not be created.";
@@ -585,8 +578,8 @@ bool SpeckleRemove::execute(PlugInArgList* pInArgList, PlugInArgList* pOutArgLis
       }
       for (unsigned int col = 0; col < pDesc->getColumnCount(); ++col)
       {
-         switchOnEncoding(pDesc->getDataType(), speckleNoiseRemove, pDestAcc->getColumn(), pSrcAcc, row, col,
-            pDesc->getRowCount(), pDesc->getColumnCount());
+         switchOnComplexEncoding(pDesc->getDataType(), speckleNoiseRemove, pDestAcc->getColumn(), pSrcAcc, row, col,
+            pDesc->getRowCount(), pDesc->getColumnCount(), pDesc->getDataType());
          pDestAcc->nextColumn();
       }
 
