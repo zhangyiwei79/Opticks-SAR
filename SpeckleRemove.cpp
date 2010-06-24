@@ -243,7 +243,11 @@ namespace
 				   }
 			   }     
                meanVal = meanVal/(OVERLAP_WINDOW_SIZE*OVERLAP_WINDOW_SIZE);
-      
+			   if (meanVal == 0)
+			   {
+				   meanVal = 0.000001;
+			   }
+     
                var = 0;
 			   for (m=0; m<OVERLAP_WINDOW_SIZE; m++)
 			   {
@@ -286,6 +290,11 @@ namespace
            noiseVar = noiseVector[i] + noiseVar;
 	   }
 	   noiseVar = noiseVar/NUM_OF_VAR;
+
+	   if (noiseVar == 0)
+	   {
+		   noiseVar = 0.00001;
+	   }
 
 	  return noiseVar;
    }
@@ -578,7 +587,7 @@ bool SpeckleRemove::execute(PlugInArgList* pInArgList, PlugInArgList* pOutArgLis
       }
       for (unsigned int col = 0; col < pDesc->getColumnCount(); ++col)
       {
-         switchOnComplexEncoding(pDesc->getDataType(), speckleNoiseRemove, pDestAcc->getColumn(), pSrcAcc, row, col,
+         switchOnEncoding(ResultType, speckleNoiseRemove, pDestAcc->getColumn(), pSrcAcc, row, col,
             pDesc->getRowCount(), pDesc->getColumnCount(), pDesc->getDataType());
          pDestAcc->nextColumn();
       }

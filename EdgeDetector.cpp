@@ -24,6 +24,7 @@
 #include "SpatialDataWindow.h"
 #include "switchOnEncoding.h"
 #include "EdgeDetector.h"
+#include "EdgeRatioThresholdDlg.h"
 #include <limits>
 #include <algorithm>
 
@@ -36,9 +37,9 @@ namespace
     #define MEDIAN_WINDOW_SIZE 5
     #define LARGE_WINDOW_SIZE 7
     
-    #define SMALL_WINDOW_THRESHOLD 0.4
-	#define MEDIAN_WINDOW_THRESHOLD 0.6
-	#define LARGE_WINDOW_THRESHOLD 0.65
+    #define SMALL_WINDOW_THRESHOLD 0.65
+	#define MEDIAN_WINDOW_THRESHOLD 0.5
+	#define LARGE_WINDOW_THRESHOLD 0.4
 
 	//Calculate the block means for horizantal/vertical edge case
    void CaculateHVMean(int tag, int SUB_WINDOW_SIZE, double **subWindow, double &lineMean, double &blockMean1, double &blockMean2)
@@ -347,21 +348,19 @@ namespace
 
 
    template<typename T>
-   void EdgeDetectSAR(T* pData, DataAccessor pSrcAcc, int row, int col, int rowSize, int colSize, EncodingType type)
+   void EdgeDetectSAR(T* pData, DataAccessor pSrcAcc, int row, int col, int rowSize, int colSize, EncodingType type, double t1, double t2, double t3)
    {
 	   bool bHasEdge = false;
 	   unsigned char pixelVal = 255;
 
 
 	   //Test edge for different window size and threshold
-	   RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, SMALL_WINDOW_SIZE, SMALL_WINDOW_THRESHOLD, bHasEdge);
-       if (bHasEdge)
+	   RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, SMALL_WINDOW_SIZE, t1, bHasEdge);
+       if (bHasEdge)  //For small window, noise may be detected as edge, so need to check with larger window sizes
 	   {
-		   pixelVal = 0;
-	   }
-       else
-	   {
-           RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, MEDIAN_WINDOW_SIZE, MEDIAN_WINDOW_THRESHOLD, bHasEdge);
+		   //pixelVal = 0;
+	  
+           RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, MEDIAN_WINDOW_SIZE, t2, bHasEdge);
 
            if (bHasEdge)
 		   {
@@ -370,7 +369,7 @@ namespace
 		   }
 		   else
 		   {
-			   RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, LARGE_WINDOW_SIZE, LARGE_WINDOW_THRESHOLD, bHasEdge);
+			   RatioEdgeDetect(pSrcAcc, row,  col, rowSize, colSize, type, LARGE_WINDOW_SIZE, t3, bHasEdge);
 			   if (bHasEdge)
 		       {
 			       pixelVal = 0;
@@ -460,72 +459,79 @@ bool EdgeDetector::execute(PlugInArgList* pInArgList, PlugInArgList* pOutArgList
    pResultRequest->setWritable(true);
    DataAccessor pDestAcc = pResultCube->getDataAccessor(pResultRequest.release());
 
-   for (unsigned int row = 0; row < pDesc->getRowCount(); ++row)
+   Service<DesktopServices> pDesktop;
+   EdgeRatioThresholdDlg dlg(pDesktop->getMainWidget(), SMALL_WINDOW_THRESHOLD, MEDIAN_WINDOW_THRESHOLD, LARGE_WINDOW_THRESHOLD);
+   int stat = dlg.exec();
+   if (stat == QDialog::Accepted)
    {
-      if (pProgress != NULL)
+      for (unsigned int row = 0; row < pDesc->getRowCount(); ++row)
       {
-         pProgress->updateProgress("Edge detect ", row * 100 / pDesc->getRowCount(), NORMAL);
-      }
-      if (isAborted())
-      {
-         std::string msg = getName() + " has been aborted.";
-         pStep->finalize(Message::Abort, msg);
          if (pProgress != NULL)
          {
-            pProgress->updateProgress(msg, 0, ABORT);
+            pProgress->updateProgress("Edge detect ", row * 100 / pDesc->getRowCount(), NORMAL);
          }
-         return false;
-      }
-      if (!pDestAcc.isValid())
-      {
-         std::string msg = "Unable to access the cube data.";
-         pStep->finalize(Message::Failure, msg);
-         if (pProgress != NULL) 
+         if (isAborted())
          {
-            pProgress->updateProgress(msg, 0, ERRORS);
+            std::string msg = getName() + " has been aborted.";
+            pStep->finalize(Message::Abort, msg);
+            if (pProgress != NULL)
+            {
+               pProgress->updateProgress(msg, 0, ABORT);
+            }
+            return false;
          }
-         return false;
-      }
-      for (unsigned int col = 0; col < pDesc->getColumnCount(); ++col)
-      {
-         switchOnComplexEncoding(pDesc->getDataType(), EdgeDetectSAR, pDestAcc->getColumn(), pSrcAcc, row, col,
-            pDesc->getRowCount(), pDesc->getColumnCount(), pDesc->getDataType());
-         pDestAcc->nextColumn();
-      }
-
-      pDestAcc->nextRow();
-   }
-
-   if (!isBatch())
-   {
-      Service<DesktopServices> pDesktop;
-
-      SpatialDataWindow* pWindow = static_cast<SpatialDataWindow*>(pDesktop->createWindow(pResultCube->getName(),
-         SPATIAL_DATA_WINDOW));
-
-      SpatialDataView* pView = (pWindow == NULL) ? NULL : pWindow->getSpatialDataView();
-      if (pView == NULL)
-      {
-         std::string msg = "Unable to create view.";
-         pStep->finalize(Message::Failure, msg);
-         if (pProgress != NULL) 
+         if (!pDestAcc.isValid())
          {
-            pProgress->updateProgress(msg, 0, ERRORS);
+            std::string msg = "Unable to access the cube data.";
+            pStep->finalize(Message::Failure, msg);
+            if (pProgress != NULL) 
+            {
+               pProgress->updateProgress(msg, 0, ERRORS);
+            }
+            return false;
          }
-         return false;
+         for (unsigned int col = 0; col < pDesc->getColumnCount(); ++col)
+         {
+            switchOnEncoding(ResultType, EdgeDetectSAR, pDestAcc->getColumn(), pSrcAcc, row, col,
+                             pDesc->getRowCount(), pDesc->getColumnCount(), pDesc->getDataType(), 
+			                 dlg.getSmallThreshold(), dlg.getMedianThreshold(), dlg.getLargeThreshold());
+            pDestAcc->nextColumn();
+         }
+
+         pDestAcc->nextRow();
       }
 
-      pView->setPrimaryRasterElement(pResultCube.get());
-      pView->createLayer(RASTER, pResultCube.get());
+      if (!isBatch())
+      {
+         //Service<DesktopServices> pDesktop;
+
+         SpatialDataWindow* pWindow = static_cast<SpatialDataWindow*>(pDesktop->createWindow(pResultCube->getName(),
+                                                                      SPATIAL_DATA_WINDOW));
+
+         SpatialDataView* pView = (pWindow == NULL) ? NULL : pWindow->getSpatialDataView();
+         if (pView == NULL)
+         {
+            std::string msg = "Unable to create view.";
+            pStep->finalize(Message::Failure, msg);
+            if (pProgress != NULL) 
+            {
+               pProgress->updateProgress(msg, 0, ERRORS);
+            }
+            return false;
+         }
+
+         pView->setPrimaryRasterElement(pResultCube.get());
+         pView->createLayer(RASTER, pResultCube.get());
+      }
+
+      if (pProgress != NULL)
+      {
+         pProgress->updateProgress("Edge detect compete.", 100, NORMAL);
+      }
+
+      pOutArgList->setPlugInArgValue("Edge detect result", pResultCube.release());
+
+      pStep->finalize();
    }
-
-   if (pProgress != NULL)
-   {
-      pProgress->updateProgress("Edge detect compete.", 100, NORMAL);
-   }
-
-   pOutArgList->setPlugInArgValue("Edge detect result", pResultCube.release());
-
-   pStep->finalize();
    return true;
 }
