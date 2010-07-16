@@ -186,9 +186,7 @@ void IDWT_Partial(double *pSrc, int row, int col, int orig_row, int orig_col, do
 		}
 	}
 
-	//ShowResult(pTemp1, 2*row-1, col);
 	ColConvolution2D(pTemp1, pFilter1, filterLen, 2*row-1, col, pTemp2, true);
-	//ShowResult(pTemp2, 2*row-1+filterLen-1,col);
 
 	//Up Sample cols
 	count = 2*row-1+filterLen-1;
@@ -230,11 +228,17 @@ void InverseWaveletTransform2D(double *pLow, double *pHor, double *pVer, double 
 	IDWT_Partial(pVer,  row, col, orig_row, orig_col, pLoFilter, pHiFilter, filterLen, pTemp);
 	IDWT_Partial(pDiag, row, col, orig_row, orig_col, pHiFilter, pHiFilter, filterLen, pTemp);
 
-	ShowResultInt(pTemp, 2*row-1+filterLen-1, 2*col-1+filterLen-1);
-
 	if ((orig_row + filterLen - 1)%2 == 0)
 	{
-		row_shift = filterLen - 2;
+		if ( 0 == row_index)
+		{
+		    row_shift = filterLen - 1;//modify, zyw
+		}
+		else
+		{
+			row_shift = filterLen - 2;//modify, zyw
+		}
+
 	}
 	else
 	{
@@ -250,7 +254,14 @@ void InverseWaveletTransform2D(double *pLow, double *pHor, double *pVer, double 
 
 	if ((orig_col + filterLen - 1)%2 == 0)
 	{
-		col_shift = filterLen - 2;
+		if ( 0 == col_index)
+		{
+		    col_shift = filterLen - 1;//modify, zyw
+		}
+		else
+		{
+			col_shift = filterLen - 2;//modify, zyw
+		}
 	}
 	else
 	{
@@ -300,7 +311,7 @@ void WaveletTransform2D(double *pSrc, int row, int col, double *pLoFilter, doubl
 	{
 		for(int j=0; j<coeff_col; j++)
 		{
-			if ((i%2 == 1) && (j%2 == 1))
+			//if ((i%2 == 0) && (j%2 == 1))
 			{
 		        pLow[nIndex] = pTemp2[i*coeff_col+j];
 				nIndex++;
@@ -315,7 +326,7 @@ void WaveletTransform2D(double *pSrc, int row, int col, double *pLoFilter, doubl
 	{
 		for(int j=0; j<coeff_col; j++)
 		{
-			if ((i%2 == 1) && (j%2 == 1))
+			//if ((i%2 == 0) && (j%2 == 1))
 			{
 		        pHor[nIndex] = pTemp2[i*coeff_col+j];
 				nIndex++;
@@ -331,7 +342,7 @@ void WaveletTransform2D(double *pSrc, int row, int col, double *pLoFilter, doubl
 	{
 		for(int j=0; j<coeff_col; j++)
 		{
-			if ((i%2 == 1) && (j%2 == 1))
+			//if ((i%2 == 0) && (j%2 == 1))
 			{
 		        pVer[nIndex] = pTemp2[i*coeff_col+j];
 				nIndex++;
@@ -346,7 +357,7 @@ void WaveletTransform2D(double *pSrc, int row, int col, double *pLoFilter, doubl
 	{
 		for(int j=0; j<coeff_col; j++)
 		{
-			if ((i%2 == 1) && (j%2 == 1))
+			//if ((i%2 == 0) && (j%2 == 1))
 			{
 		        pDiag[nIndex] = pTemp2[i*coeff_col+j];
 				nIndex++;
@@ -359,3 +370,419 @@ void WaveletTransform2D(double *pSrc, int row, int col, double *pLoFilter, doubl
 	
 	return;
 }
+
+void NodeTransform(WaveletNode *pParent,double *pLoFilter, double *pHiFilter, int filterLen, WaveletNode *pCurrentNode)
+{
+	double *pSrc, *pLow, *pVer, *pHor, *pDiag;
+	WaveletNode *pNode = pParent;
+	WaveletNode *pNewNode;
+	int m, n, nIndex, row, col, currentRow, currentCol, coeff_row, coeff_col;
+
+	if (NULL == pNode)
+	{
+		return;
+	}
+
+	while(pNode != NULL)
+	{
+		pSrc = (double *)malloc(sizeof(double)*(pNode->coeffRow/2+1)*(pNode->coeffCol/2+1));
+
+		for (int k=0; k<4; k++)
+		{
+			pNewNode = (WaveletNode *)malloc(sizeof(WaveletNode));
+			memset(pNewNode, 0, sizeof(WaveletNode));
+
+			nIndex = 0;
+
+			if (k == 0)
+			{
+				if (pNode->coeffRow % 2 == 1)
+				{
+					row = pNode->coeffRow/2+1;
+				}
+				else
+				{
+					row = pNode->coeffRow/2;
+				}
+
+				if (pNode->coeffCol % 2 == 1)
+				{
+					col = pNode->coeffCol/2+1;
+				}
+				else
+				{
+					col = pNode->coeffCol/2;
+				}
+
+				m = 0; n = 0;
+			}
+			if (k == 1)
+			{
+				if (pNode->coeffRow % 2 == 1)
+				{
+					row = pNode->coeffRow/2+1;
+				}
+				else
+				{
+					row = pNode->coeffRow/2;
+				}
+
+                col = pNode->coeffCol/2;
+
+				m = 0; n = 1;
+			}
+            if (k == 2)
+			{
+				row = pNode->coeffRow/2;
+
+				if (pNode->coeffCol % 2 == 1)
+				{
+					col = pNode->coeffCol/2+1;
+				}
+				else
+				{
+					col = pNode->coeffCol/2;
+				}
+				m = 1; n = 0;
+			}
+
+			if (k == 3)
+			{
+				row = pNode->coeffRow/2;
+				col = pNode->coeffCol/2;
+				m = 1; n = 1;
+			}
+
+			pDiag = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+			pVer = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+			pHor = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+			pLow = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+
+			pNewNode->pDiag = pDiag;
+			pNewNode->pHor = pHor;
+			pNewNode->pVer = pVer;
+			pNewNode->pLow = pLow;
+
+			pNewNode->coeffCol = col+filterLen-1;
+			pNewNode->coeffRow = row+filterLen-1;
+
+			for (int i=0; i<pNode->coeffRow; i++)
+	        {
+		        for(int j=0; j<pNode->coeffCol; j++)
+		        {
+			        if ((i%2 == m) && (j%2 == n))
+			        {
+						pSrc[nIndex] = pNode->pLow[i*pNode->coeffCol+j];
+				        nIndex++;
+			        }
+		        }
+			}
+
+			WaveletTransform2D(pSrc, row, col, pLoFilter, pHiFilter, filterLen, pLow, pVer, pHor, pDiag);
+
+			pCurrentNode->sibling = pNewNode;
+			pCurrentNode = pNewNode;
+		}
+
+		pNode = pNode->sibling;
+		free(pSrc);
+	}
+	
+}
+		
+
+void ShiftInvariantWaveletTransform(double *pSrc, int row, int col, double *pLoFilter, double *pHiFilter, int filterLen, int nLayer, WaveletNode *pNodeList)
+{
+	WaveletNode *pParent, *pRootNode;
+
+	//Generate base node
+	pRootNode = (WaveletNode *)malloc(sizeof(WaveletNode));
+	memset(pRootNode, 0 , sizeof(WaveletNode));
+	pRootNode->pLow = pSrc;
+	pRootNode->coeffCol = col;
+	pRootNode->coeffRow = row;
+	pNodeList->sibling = pRootNode;
+	
+	//Generate first layer
+	pRootNode = (WaveletNode *)malloc(sizeof(WaveletNode));
+	memset(pRootNode, 0 , sizeof(WaveletNode));
+    double *pDiag = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+	double *pVer = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+	double *pHor = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+	double *pLow = (double *)malloc(sizeof(double)*(row+filterLen-1)*(col+filterLen-1));
+
+	pRootNode->pDiag = pDiag;
+	pRootNode->pHor = pHor;
+	pRootNode->pVer = pVer;
+	pRootNode->pLow = pLow;
+	pRootNode->coeffRow = row+filterLen-1;
+	pRootNode->coeffCol = col+filterLen-1;
+
+	WaveletTransform2D(pSrc, row, col, pLoFilter, pHiFilter, filterLen, pLow, pVer, pHor, pDiag);
+	pParent = pRootNode;
+	(pNodeList+1)->sibling = pParent;
+
+	//Generate the rest layers
+	for (int i=2; i<=nLayer; i++)
+	{
+		NodeTransform(pParent,pLoFilter, pHiFilter, filterLen, (pNodeList+i));
+		pParent = (pNodeList+i)->sibling;
+	}
+
+}
+
+void NodeInverseTransform(WaveletNode *pParent,double *pLoFilter, double *pHiFilter, int filterLen, WaveletNode *pCurrentNode, int shift)
+{
+	WaveletNode *pNode = pCurrentNode;
+
+	int m,n,s=1,t=1,nIndex = 0;
+	int origRow = pParent->coeffRow/2, origCol = pParent->coeffCol/2;
+	int row = pNode->coeffRow/2+1, col = pNode->coeffCol/2+1;
+
+	if (shift == 0)
+	{
+	    if (pParent->coeffRow % 2 == 1)
+		{
+		    origRow = origRow + 1;
+		}
+	    if (pParent->coeffCol % 2 == 1)
+		{
+		    origCol = origCol + 1;
+		}
+		s = 0; t = 0;
+	}
+	if (shift == 1)
+	{
+	    if (pParent->coeffRow % 2 == 1)
+		{
+		    origRow = origRow + 1;
+		}
+		s = 0; t = 1;
+	}
+	if (shift == 2)
+	{
+	    if (pParent->coeffCol % 2 == 1)
+		{
+		    origCol = origCol + 1;
+		}
+		s= 1; t = 0;
+	}
+	
+	if (shift < 0)
+	{
+		origRow = pParent->coeffRow;
+		origCol = pParent->coeffCol;
+	}
+
+	double *pResult = (double *)malloc(sizeof(double)*origRow*origCol);
+	double *pFinalResult = (double *)malloc(sizeof(double)*origRow*origCol);
+	memset(pFinalResult, 0, sizeof(double)*origRow*origCol);
+
+	double *pDiag = (double *)malloc(sizeof(double)*row*col);
+    double *pVer = (double *)malloc(sizeof(double)*row*col);
+	double *pHor = (double *)malloc(sizeof(double)*row*col);
+	double *pLow = (double *)malloc(sizeof(double)*row*col);
+
+
+	for (int k=0; k<4; k++)
+	{
+	    nIndex = 0;
+
+		if (k == 0)
+			{
+				if (pNode->coeffRow % 2 == 1)
+				{
+					row = pNode->coeffRow/2+1;
+				}
+				else
+				{
+					row = pNode->coeffRow/2;
+				}
+
+				if (pNode->coeffCol % 2 == 1)
+				{
+					col = pNode->coeffCol/2+1;
+				}
+				else
+				{
+					col = pNode->coeffCol/2;
+				}
+
+				m = 0; n = 0;
+			}
+			if (k == 1)
+			{
+				if (pNode->coeffRow % 2 == 1)
+				{
+					row = pNode->coeffRow/2+1;
+				}
+				else
+				{
+					row = pNode->coeffRow/2;
+				}
+
+                col = pNode->coeffCol/2;
+
+				m = 0; n = 1;
+			}
+            if (k == 2)
+			{
+				row = pNode->coeffRow/2;
+
+				if (pNode->coeffCol % 2 == 1)
+				{
+					col = pNode->coeffCol/2+1;
+				}
+				else
+				{
+					col = pNode->coeffCol/2;
+				}
+				m = 1; n = 0;
+			}
+
+			if (k == 3)
+			{
+				row = pNode->coeffRow/2;
+				col = pNode->coeffCol/2;
+				m = 1; n = 1;
+			}
+
+		for (int i=0; i<pNode->coeffRow; i++)
+	    {
+		    for(int j=0; j<pNode->coeffCol; j++)
+		    {
+			    if ((i%2 == m) && (j%2 == n))
+			    {
+				    pLow[nIndex] = pNode->pLow[i*pNode->coeffCol+j];
+					pVer[nIndex] = pNode->pVer[i*pNode->coeffCol+j];
+					pHor[nIndex] = pNode->pHor[i*pNode->coeffCol+j];
+					pDiag[nIndex] = pNode->pDiag[i*pNode->coeffCol+j];
+				    nIndex++;
+			        
+		        }
+			}		
+		}
+
+		memset(pResult, 0, sizeof(double)*origRow*origCol);
+		InverseWaveletTransform2D(pLow, pHor, pVer, pDiag,  row, col, origRow, origCol, pLoFilter, pHiFilter, filterLen, pResult,m, n);
+
+		for (int i=0; i<origRow; i++)
+	    {
+		    for(int j=0; j<origCol; j++)
+		    {
+				*(pFinalResult + i*origCol + j) = *(pFinalResult + i*origCol + j) + (*(pResult + i*origCol + j))/4;
+			}
+		}
+
+	}
+
+	//ShowResult(pResult, origRow, origCol);
+
+	//Restore the result
+	nIndex = 0;
+	if (shift >= 0)
+	{
+	    for (int i=0; i<pParent->coeffRow; i++)
+	    {
+            for(int j=0; j<pParent->coeffCol; j++)
+		    {
+	            if ((i%2 == s) && (j%2 == t))
+			    {
+				    pParent->pLow[i*pParent->coeffCol+j] = pFinalResult[nIndex];
+				    nIndex++;
+				}
+			}		
+		}
+	}
+	else
+	{
+	    for (int i=0; i<pParent->coeffRow; i++)
+	    {
+            for(int j=0; j<pParent->coeffCol; j++)
+		    {
+				pParent->pLow[i*pParent->coeffCol+j] = pFinalResult[nIndex];
+				nIndex++;
+			}		
+		}
+	}
+
+	//ShowResult(pParent->pLow, pParent->coeffRow, pParent->coeffCol);
+
+	free(pLow);
+	free(pVer);
+	free(pHor);
+	free(pDiag);
+
+	free(pResult);
+	free(pFinalResult);
+
+}
+
+	
+
+
+
+
+void ShiftInvariantInverseWaveletTransform(int row, int col, double *pLoFilter, double *pHiFilter, int filterLen, int nLayer, WaveletNode *pNodeList)
+{
+	WaveletNode *pParent, *pCurrent, *pTemp1, *pTemp2;
+
+	pParent = pNodeList + nLayer - 1;
+	pCurrent = pNodeList + nLayer;
+
+	for (int i=0; i< (nLayer-1); i++)
+	{
+		pTemp1 = pParent->sibling;
+		pTemp2 = pCurrent->sibling;
+
+		while(pTemp1 != NULL)
+		{
+			//ShowResult(pTemp1->pLow, pTemp1->coeffRow, pTemp1->coeffCol);
+
+			for (int j=0; j<4; j++)
+			{
+				NodeInverseTransform(pTemp1, pLoFilter, pHiFilter, filterLen, pTemp2, j);
+
+				pTemp2 = pTemp2->sibling;
+			}
+
+			//ShowResult(pTemp1->pLow, pTemp1->coeffRow, pTemp1->coeffCol);
+
+			pTemp1 = pTemp1->sibling;
+		}
+
+		pParent--;
+		pCurrent--;
+	}
+
+	//ShowResult(pCurrent->sibling->pLow,pCurrent->sibling->coeffRow, pCurrent->sibling->coeffCol);
+	NodeInverseTransform(pParent->sibling, pLoFilter, pHiFilter, filterLen, pCurrent->sibling, -1);
+
+}
+
+void ReleaseList(WaveletNode *pNodeList, int nLayer)
+{
+	WaveletNode *pNode, *pTemp;
+
+	for (int i=0; i<nLayer; i++)
+	{
+		pNode = (pNodeList+i+1)->sibling;
+
+		while(pNode!= NULL)
+		{
+			free(pNode->pDiag);
+			free(pNode->pLow);
+			free(pNode->pHor);
+			free(pNode->pVer);
+
+			pTemp = pNode;
+		    pNode= pNode->sibling;
+
+			free(pTemp);
+		}
+	}
+
+	free(pNodeList->sibling);
+}
+
+
