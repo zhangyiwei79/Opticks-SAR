@@ -2,11 +2,6 @@
 
 #include "wavelet.h"
 
-//Daubechies 2 wavelet basis
-double pLoFilter[4] = {0.4830, 0.8365, 0.2241, -0.1294};
-double pHiFilter[4] = {-0.1294,-0.2241, 0.8365, -0.4830};
-double pRecHiFilter[4] = {-0.4830, 0.8365, -0.2241, -0.1294};
-double pRecLoFilter[4] = {-0.1294,0.2241, 0.8365, 0.4830};
 
 //Perform column convlolution
 void ColConvolution2D(double *pSrc, double *pFilter, int filterLength, int row, int col, double *pRes, bool bAddZero)
@@ -376,7 +371,7 @@ void NodeTransform(WaveletNode *pParent,double *pLoFilter, double *pHiFilter, in
 	double *pSrc, *pLow, *pVer, *pHor, *pDiag;
 	WaveletNode *pNode = pParent;
 	WaveletNode *pNewNode;
-	int m, n, nIndex, row, col, currentRow, currentCol, coeff_row, coeff_col;
+	int m, n, nIndex, row, col;
 
 	if (NULL == pNode)
 	{
@@ -785,4 +780,123 @@ void ReleaseList(WaveletNode *pNodeList, int nLayer)
 	free(pNodeList->sibling);
 }
 
+int PartitionSequence(double *pData, int left, int right, int pivotIndex)
+{
+	double TempVal;
+	int storeIndex = left;
+    double pivotValue = pData[pivotIndex];
 
+    //  swap list[pivotIndex] and list[right] , Move pivot to end
+    pData[pivotIndex] = pData[right];
+	pData[right] = pivotValue;
+
+     for (int i = left; i <= (right-1); i++)
+	 {
+         if (pData[i] < pivotValue)
+		 {
+             //swap list[storeIndex] and list[i]
+             TempVal = pData[storeIndex];
+	         pData[storeIndex] = pData[i];
+             pData[i] = TempVal;
+
+             storeIndex = storeIndex + 1;
+		 }
+	 }
+
+     //swap list[right] and list[storeIndex]  // Move pivot to its final place
+     TempVal = pData[storeIndex];
+	 pData[storeIndex] = pData[right];
+     pData[right] = TempVal;
+
+     return storeIndex;
+}
+
+//Select the median from the HH coefficients
+double SelectMedian(double *list, int left, int right, int k)
+{
+    int pivotNewIndex;
+	int pivotIndex;
+
+    while(1)
+	{
+         pivotIndex = left;
+         
+		 pivotNewIndex = PartitionSequence(list, left, right, pivotIndex);
+         
+		 if (k == pivotNewIndex)
+             return list[k];
+         else if (k < pivotNewIndex)
+             right = pivotNewIndex-1;
+         else
+             left = pivotNewIndex+1;
+	}
+}
+
+//Calculate the threshold based on noise variance
+double CalculateThreshold(double *pData, int nLength)
+{
+	double thresHold = 0;
+	int k;
+	
+	if (k%2 == 0)
+	    k= nLength/2-1;
+	else
+		k= nLength/2;
+
+	thresHold = SelectMedian(pData, 0, (nLength-1), k);
+	thresHold = 1.5*thresHold/0.674;
+
+	return thresHold;
+}
+
+void SoftThreshold(double *pData, double thresHold, int nLength)
+{
+	for (int i=0; i<nLength; i++)
+	{
+		if (pData[i] > thresHold)
+		{
+            pData[i] = pData[i] - thresHold;
+		}
+		else if (pData[i] < -thresHold)
+		{
+            pData[i] = pData[i] + thresHold;
+		}
+		else
+		{
+			pData[i] = 0;
+		}
+	}
+}
+
+//Perform soft thresholding for all vertical, horizontal and diagnol coefficiets
+void WaveletDenoise(WaveletNode *pNodeList, double *pBuffer, int nLayer)
+{
+	WaveletNode *pNode, *pTemp;
+	double thresHold;
+	int nCount;
+
+	pNode = pNodeList + 1;
+	nCount = pNode->sibling->coeffRow*pNode->sibling->coeffCol;
+
+	for (int i=0; i<nCount; i++)
+	{
+		pBuffer[i] = abs(pNode->sibling->pDiag[i]);
+	}
+	thresHold = CalculateThreshold(pBuffer, nCount);
+
+	for (int i=0; i< nLayer; i++)
+	{
+		pTemp = pNode->sibling;
+
+		while(pTemp != NULL)
+		{
+			SoftThreshold(pTemp->pVer, thresHold, pTemp->coeffRow*pTemp->coeffCol);
+			SoftThreshold(pTemp->pHor, thresHold, pTemp->coeffRow*pTemp->coeffCol);
+			SoftThreshold(pTemp->pDiag, thresHold, pTemp->coeffRow*pTemp->coeffCol);
+
+			pTemp = pTemp->sibling;
+		}
+
+		pNode++;
+	}
+}

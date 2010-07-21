@@ -2,9 +2,9 @@
 #ifndef	_WAVELET_TRANSFORM_H_
 #define _WAVELET_TRANSFORM_H_
 
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 #include <math.h>
 
 typedef struct _WaveletNode WaveletNode;
@@ -28,6 +28,9 @@ void InverseWaveletTransform2D(double *pLow, double *pHor, double *pVer, double 
 
 void ShiftInvariantWaveletTransform(double *pSrc, int row, int col, double *pLoFilter, double *pHiFilter, int filterLen, int nLayer, WaveletNode *pNodeList);
 void ShiftInvariantInverseWaveletTransform(int row, int col, double *pLoFilter, double *pHiFilter, int filterLen, int nLayer, WaveletNode *pNodeList);
+
+void WaveletDenoise(WaveletNode *pNodeList, double *pBuffer, int nLayer);
+void ReleaseList(WaveletNode *pNodeList, int nLayer);
 
 #endif
 
