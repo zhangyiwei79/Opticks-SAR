@@ -1,1 +1,36 @@
-Opticks SAR
+Opticks SAR Processing Plugin
+
+Source File List:
+
+Filter based speckle removal
+    SpeckleRemove.cpp
+    SpeckleRemove.h
+    
+
+Wavelet based speckle removal
+    WaveletSpeckleRemove.cpp
+    WaveletSpeckleRemove.h
+    wavelet.c
+    wavelet.h
+    
+
+Edge detector
+    EdgeDetector.cpp
+    EdgeDetector.h
+    EdgeRatioThresholdDlg.cpp
+    EdgeRatioThresholdDlg.h
+    moc_EdgeRatioThresholdDlg.cpp
+    
+
+Texture based image Ssgmentation
+    ImageSegmentation.cpp
+    ImageSegmentation.h
+    TextureSegmentation.cpp
+    TextureSegmentation.h
+    
+
+Plugin Extension
+    SAR_Processing.aeb
+    
+    
+Test Images can be obtained under directory "SAR images"
